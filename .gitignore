@@ -1,0 +1,15 @@
+# IDE
+.vscode
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Development environment
+.venv
+*.env
+
+# Coverage artifacts
+.coverage
+coverage.xml
+htmlcov
