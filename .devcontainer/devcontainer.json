@@ -5,6 +5,7 @@
     "context": ".."
   },
   "remoteUser": "root",
+  "runArgs": ["--network=host"],
   "customizations": {
     "vscode": {
       "extensions": [

@@ -1,0 +1,6 @@
+class TrailwatchError(Exception):
+    """Base exception for all trailwatch exceptions"""
+
+
+class NotConfiguredError(TrailwatchError):
+    """Exception raised when trailwatch is not configured"""
