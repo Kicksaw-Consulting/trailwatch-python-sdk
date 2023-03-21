@@ -5,129 +5,59 @@ import logging
 import traceback
 
 from types import TracebackType
-from typing import Optional, Type
+from typing import Optional, Type, Union
 
 import requests
 
-from .config import SHARED_CONFIGURATION, TrailwatchConfig
+from .config import NOTSET, TrailwatchConfig
+from .connectors.aws.api import TrailwatchApi
+from .connectors.aws.handler import TrailwatchHandler
 from .exceptions import TrailwatchError
-from .handler import TrailwatchHandler
-
-trailwatch_logger = logging.getLogger("trailwatch")
-trailwatch_logger.setLevel(logging.DEBUG)
 
 
 class TrailwatchContext:
-    session: requests.Session
-    config: TrailwatchConfig
-    execution: dict
-    handler: TrailwatchHandler
-
     def __init__(
         self,
         job: str,
         job_description: str,
-        execution_ttl: Optional[int] = None,
-        log_ttl: Optional[int] = None,
-        error_ttl: Optional[int] = None,
+        loggers: Union[Optional[list[str]], object] = NOTSET,
+        execution_ttl: Union[Optional[int], object] = NOTSET,
+        log_ttl: Union[Optional[int], object] = NOTSET,
+        error_ttl: Union[Optional[int], object] = NOTSET,
     ) -> None:
         self.session = requests.Session()
-        self.config = TrailwatchConfig(**SHARED_CONFIGURATION)
-        self.config["job"] = job
-        self.config["job_description"] = job_description
-        self.config["execution_ttl"] = execution_ttl
-        self.config["log_ttl"] = log_ttl
-        self.config["error_ttl"] = error_ttl
+        self.config = TrailwatchConfig(
+            job=job,
+            job_description=job_description,
+            loggers=loggers,
+            execution_ttl=execution_ttl,
+            log_ttl=log_ttl,
+            error_ttl=error_ttl,
+        )
+        self.api = TrailwatchApi(self.session, self.config)
+        self.execution_id = None
+        self.handler = None
 
     def __enter__(self) -> TrailwatchContext:
-        # Upsert project
-        self.session.put(
-            "/".join(
-                [
-                    self.config["url"],
-                    "api",
-                    "v1",
-                    "projects",
-                ]
-            ),
-            json={
-                "name": self.config["project"],
-                "description": self.config["project_description"],
-            },
-            headers={"x-api-key": self.config["api_key"]},
-            timeout=30,
+        self.api.upsert_project(self.config.project, self.config.project_description)
+        self.api.upsert_environment(self.config.environment)
+        self.api.upsert_job(
+            self.config.job,
+            self.config.job_description,
+            self.config.project,
         )
-
-        # Upsert environment
-        self.session.put(
-            "/".join(
-                [
-                    self.config["url"],
-                    "api",
-                    "v1",
-                    "environments",
-                ]
-            ),
-            json={
-                "name": self.config["environment"],
-            },
-            headers={"x-api-key": self.config["api_key"]},
-            timeout=30,
+        self.execution_id = self.api.create_execution(
+            self.config.project,
+            self.config.environment,
+            self.config.job,
         )
-
-        # Upsert job
-        self.session.put(
-            "/".join(
-                [
-                    self.config["url"],
-                    "api",
-                    "v1",
-                    "jobs",
-                ]
-            ),
-            json={
-                "name": self.config["job"],
-                "description": self.config["job_description"],
-                "project": self.config["project"],
-            },
-            headers={"x-api-key": self.config["api_key"]},
-            timeout=30,
-        )
-
-        # Create execution
-        self.execution = self.session.post(
-            "/".join(
-                [
-                    self.config["url"],
-                    "api",
-                    "v1",
-                    "executions",
-                ]
-            ),
-            json={
-                "project": self.config["project"],
-                "environment": self.config["environment"],
-                "job": self.config["job"],
-                "status": "running",
-                "start": datetime.datetime.utcnow().isoformat(),
-                "ttl": self.config["execution_ttl"],
-            },
-            headers={"x-api-key": self.config["api_key"]},
-            timeout=30,
-        ).json()
 
         # Register handlers
-        self.handler = TrailwatchHandler(
-            config=self.config,
-            session=self.session,
-            execution_id=self.execution["id"],
-        )
+        self.handler = TrailwatchHandler(execution_id=self.execution_id, api=self.api)
         self.handler.setLevel(logging.NOTSET)
-        for logger_name in self.config["loggers"]:
+        for logger_name in self.config.loggers:
             _logger = logging.getLogger(logger_name)
             _logger.addHandler(self.handler)
-
-        trailwatch_logger.info("Started execution")
 
         return self
 
@@ -137,61 +67,31 @@ class TrailwatchContext:
         exc_value: Optional[Exception],
         exc_traceback: Optional[TracebackType],
     ) -> bool:
-        # Update execution status
-        self.session.patch(
-            "/".join(
-                [
-                    self.config["url"],
-                    "api",
-                    "v1",
-                    "executions",
-                    self.execution["id"],
-                ]
-            ),
-            json={
-                "status": "failure" if exc_type is not None else "success",
-                "end": datetime.datetime.utcnow().isoformat(),
-            },
-            headers={"x-api-key": self.config["api_key"]},
-            timeout=30,
+        end = datetime.datetime.utcnow()
+        self.api.update_execution(
+            self.execution_id,
+            "failure" if exc_type is not None else "success",
+            end,
         )
 
         # Upload error and traceback to trailwatch server
         if exc_type is not None:
-            self.session.post(
-                "/".join(
-                    [
-                        self.config["url"],
-                        "api",
-                        "v1",
-                        "errors",
-                    ]
+            self.api.create_error(
+                execution_id=self.execution_id,
+                timestamp=end,
+                name=exc_type.__name__,
+                message=str(exc_value),
+                traceback="".join(
+                    traceback.format_exception(
+                        etype=exc_type,
+                        value=exc_value,
+                        tb=exc_traceback,
+                    )
                 ),
-                json={
-                    "execution_id": self.execution["id"],
-                    "timestamp": datetime.datetime.utcnow().isoformat(),
-                    "name": exc_type.__name__,
-                    "msg": str(exc_value),
-                    "ttl": self.config["error_ttl"],
-                    "traceback": "".join(
-                        traceback.format_exception(
-                            etype=exc_type,
-                            value=exc_value,
-                            tb=exc_traceback,
-                        )
-                    ),
-                },
-                headers={"x-api-key": self.config["api_key"]},
-                timeout=30,
             )
 
-        # Close session
-        self.session.close()
-
-        trailwatch_logger.info("Finished execution")
-
         # Remove trailwatch handler from loggers
-        for logger_name in self.config["loggers"]:
+        for logger_name in self.config.loggers:
             _logger = logging.getLogger(logger_name)
             _logger.removeHandler(self.handler)
 

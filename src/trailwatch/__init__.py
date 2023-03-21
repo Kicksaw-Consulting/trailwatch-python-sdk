@@ -12,6 +12,7 @@ from .config import configure
 from .context import TrailwatchContext
 
 
+# TODO - add timeout and ttl configuration
 def watch(
     job: Optional[str] = None,
     job_description: Optional[str] = None,
