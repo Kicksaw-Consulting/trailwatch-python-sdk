@@ -40,7 +40,7 @@ class TrailwatchHandler(logging.Handler):
                 "lineno": record.lineno,
                 "msg": record.message,
                 "func": record.funcName,
-                "ttl": self.__trailwatch_config["ttl"],
+                "ttl": self.__trailwatch_config["log_ttl"],
             },
             headers={"x-api-key": self.__trailwatch_config["api_key"]},
             timeout=30,

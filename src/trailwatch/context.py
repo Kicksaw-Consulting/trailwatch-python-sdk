@@ -13,6 +13,9 @@ from .config import SHARED_CONFIGURATION, TrailwatchConfig
 from .exceptions import TrailwatchError
 from .handler import TrailwatchHandler
 
+trailwatch_logger = logging.getLogger("trailwatch")
+trailwatch_logger.setLevel(logging.DEBUG)
+
 
 class TrailwatchContext:
     session: requests.Session
@@ -20,11 +23,21 @@ class TrailwatchContext:
     execution: dict
     handler: TrailwatchHandler
 
-    def __init__(self, job: str, ttl: int) -> None:
+    def __init__(
+        self,
+        job: str,
+        job_description: str,
+        execution_ttl: Optional[int] = None,
+        log_ttl: Optional[int] = None,
+        error_ttl: Optional[int] = None,
+    ) -> None:
         self.session = requests.Session()
         self.config = TrailwatchConfig(**SHARED_CONFIGURATION)
         self.config["job"] = job
-        self.config["ttl"] = ttl
+        self.config["job_description"] = job_description
+        self.config["execution_ttl"] = execution_ttl
+        self.config["log_ttl"] = log_ttl
+        self.config["error_ttl"] = error_ttl
 
     def __enter__(self) -> TrailwatchContext:
         # Upsert project
@@ -39,7 +52,24 @@ class TrailwatchContext:
             ),
             json={
                 "name": self.config["project"],
-                "description": self.config["project"],
+                "description": self.config["project_description"],
+            },
+            headers={"x-api-key": self.config["api_key"]},
+            timeout=30,
+        )
+
+        # Upsert environment
+        self.session.put(
+            "/".join(
+                [
+                    self.config["url"],
+                    "api",
+                    "v1",
+                    "environments",
+                ]
+            ),
+            json={
+                "name": self.config["environment"],
             },
             headers={"x-api-key": self.config["api_key"]},
             timeout=30,
@@ -57,7 +87,7 @@ class TrailwatchContext:
             ),
             json={
                 "name": self.config["job"],
-                "description": self.config["job"],
+                "description": self.config["job_description"],
                 "project": self.config["project"],
             },
             headers={"x-api-key": self.config["api_key"]},
@@ -80,7 +110,7 @@ class TrailwatchContext:
                 "job": self.config["job"],
                 "status": "running",
                 "start": datetime.datetime.utcnow().isoformat(),
-                "ttl": self.config["ttl"],
+                "ttl": self.config["execution_ttl"],
             },
             headers={"x-api-key": self.config["api_key"]},
             timeout=30,
@@ -97,6 +127,8 @@ class TrailwatchContext:
             _logger = logging.getLogger(logger_name)
             _logger.addHandler(self.handler)
 
+        trailwatch_logger.info("Started execution")
+
         return self
 
     def __exit__(
@@ -106,7 +138,7 @@ class TrailwatchContext:
         exc_traceback: Optional[TracebackType],
     ) -> bool:
         # Update execution status
-        response = self.session.patch(
+        self.session.patch(
             "/".join(
                 [
                     self.config["url"],
@@ -123,7 +155,6 @@ class TrailwatchContext:
             headers={"x-api-key": self.config["api_key"]},
             timeout=30,
         )
-        response.raise_for_status()
 
         # Upload error and traceback to trailwatch server
         if exc_type is not None:
@@ -141,7 +172,7 @@ class TrailwatchContext:
                     "timestamp": datetime.datetime.utcnow().isoformat(),
                     "name": exc_type.__name__,
                     "msg": str(exc_value),
-                    "ttl": self.config["ttl"],
+                    "ttl": self.config["error_ttl"],
                     "traceback": "".join(
                         traceback.format_exception(
                             etype=exc_type,
@@ -156,6 +187,8 @@ class TrailwatchContext:
 
         # Close session
         self.session.close()
+
+        trailwatch_logger.info("Finished execution")
 
         # Remove trailwatch handler from loggers
         for logger_name in self.config["loggers"]:
