@@ -1,14 +1,22 @@
 import datetime
 import logging
 
+from typing import Optional
+
 from .api import TrailwatchApi
 
 
 class TrailwatchHandler(logging.Handler):
-    def __init__(self, execution_id: str, api: TrailwatchApi):
+    def __init__(
+        self,
+        execution_id: str,
+        api: TrailwatchApi,
+        ttl: Optional[int] = None,
+    ):
         logging.Handler.__init__(self)
         self.execution_id = execution_id
         self.api = api
+        self.ttl = ttl
 
     def emit(self, record: logging.LogRecord):
         self.format(record)
@@ -20,4 +28,5 @@ class TrailwatchHandler(logging.Handler):
             lineno=record.lineno,
             msg=record.message,
             func=record.funcName,
+            ttl=self.ttl,
         )

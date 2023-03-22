@@ -4,3 +4,7 @@ class TrailwatchError(Exception):
 
 class NotConfiguredError(TrailwatchError):
     """Exception raised when trailwatch is not configured"""
+
+
+class ExecutionTimeoutError(TrailwatchError):
+    """Exception raised when an execution times out"""

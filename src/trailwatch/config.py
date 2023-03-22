@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Optional, Union
 
+from trailwatch.connectors.base import ConnectorBase
+
 from .exceptions import NotConfiguredError
 
 NOTSET = object()
@@ -9,12 +11,11 @@ NOTSET = object()
 @dataclass(frozen=True)
 class SharedConfiguration:
     is_configured: bool = False
+    connectors: list[ConnectorBase] = field(default_factory=list)
 
     project: str = ""
     project_description: str = ""
     environment: str = ""
-    url: str = ""
-    api_key: str = ""
     loggers: list[str] = field(default_factory=list)
     execution_ttl: Optional[int] = None
     log_ttl: Optional[int] = None
@@ -57,10 +58,13 @@ class TrailwatchConfig:
             By default, no logs are sent.
         execution_ttl : Optional[int], optional
             Time to live for the execution record in seconds.
+            By default, global configuration is used.
         log_ttl : Optional[int], optional
             Time to live for the log records in seconds.
+            By default, global configuration is used.
         error_ttl : Optional[int], optional
             Time to live for the error records in seconds.
+            By default, global configuration is used.
 
         """
         if not self.shared_configuration.is_configured:
@@ -85,14 +89,6 @@ class TrailwatchConfig:
     @property
     def environment(self) -> str:
         return self.shared_configuration.environment
-
-    @property
-    def url(self) -> str:
-        return self.shared_configuration.url
-
-    @property
-    def api_key(self) -> str:
-        return self.shared_configuration.api_key
 
     @property
     def loggers(self) -> list[str]:
@@ -127,8 +123,7 @@ def configure(
     project: str,
     project_description: str,
     environment: str,
-    url: str,
-    api_key: str,
+    connectors: list[ConnectorBase],
     loggers: Optional[list[str]] = None,
     execution_ttl: Optional[int] = None,
     log_ttl: Optional[int] = None,
@@ -152,31 +147,30 @@ def configure(
     environment : str
         Environment in which all jobs are executed.
         E.g., 'production', 'staging', 'development'.
-    url : str
-        URL pointing to TrailWatch instance deployed on AWS.
-        E.g., 'https://somerandomstring.execute-api.us-west-2.amazonaws.com'.
-    api_key : str
-        API key to be included in the 'x-api-key' header when calling the REST API.
     loggers : Optional[list[str]], optional
         List of loggers logs from which are sent to Trailwatch.
         By default, no logs are sent.
     execution_ttl : Optional[int], optional
         Time to live for the execution record in seconds.
+        By default, the execution record is kept indefinitely.
     log_ttl : Optional[int], optional
         Time to live for the log records in seconds.
+        By default, the log records are kept indefinitely.
     error_ttl : Optional[int], optional
         Time to live for the error records in seconds.
+        By default, the error records are kept indefinitely.
 
     """
+    if len(connectors) == 0:
+        raise ValueError("At least one connector must be configured")
     TrailwatchConfig.shared_configuration = SharedConfiguration(
         is_configured=True,
         project=project,
         project_description=project_description,
         environment=environment,
-        url=url,
-        api_key=api_key,
         loggers=loggers or [],
         execution_ttl=execution_ttl,
         log_ttl=log_ttl,
         error_ttl=error_ttl,
+        connectors=connectors,
     )

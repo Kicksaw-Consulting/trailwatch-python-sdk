@@ -1,18 +1,12 @@
 from __future__ import annotations
 
 import datetime
-import logging
-import traceback
 
 from types import TracebackType
 from typing import Optional, Type, Union
 
-import requests
-
 from .config import NOTSET, TrailwatchConfig
-from .connectors.aws.api import TrailwatchApi
-from .connectors.aws.handler import TrailwatchHandler
-from .exceptions import TrailwatchError
+from .exceptions import ExecutionTimeoutError, TrailwatchError
 
 
 class TrailwatchContext:
@@ -25,7 +19,26 @@ class TrailwatchContext:
         log_ttl: Union[Optional[int], object] = NOTSET,
         error_ttl: Union[Optional[int], object] = NOTSET,
     ) -> None:
-        self.session = requests.Session()
+        """
+        Initialize a TrailwatchContext instance for a job.
+
+        Parameters
+        ----------
+        job : str
+            Job name. E.g., 'Upsert appointments'.
+        job_description : str
+            Job description. E.g., 'Upsert appointments from ModMed to Salesforce'.
+        loggers : Optional[list[str]], optional
+            List of loggers logs from which are sent to Trailwatch.
+            By default, no logs are sent.
+        execution_ttl : Optional[int], optional
+            Time to live for the execution record in seconds.
+        log_ttl : Optional[int], optional
+            Time to live for the log records in seconds.
+        error_ttl : Optional[int], optional
+            Time to live for the error records in seconds.
+
+        """
         self.config = TrailwatchConfig(
             job=job,
             job_description=job_description,
@@ -34,31 +47,12 @@ class TrailwatchContext:
             log_ttl=log_ttl,
             error_ttl=error_ttl,
         )
-        self.api = TrailwatchApi(self.session, self.config)
-        self.execution_id = None
-        self.handler = None
 
     def __enter__(self) -> TrailwatchContext:
-        self.api.upsert_project(self.config.project, self.config.project_description)
-        self.api.upsert_environment(self.config.environment)
-        self.api.upsert_job(
-            self.config.job,
-            self.config.job_description,
-            self.config.project,
-        )
-        self.execution_id = self.api.create_execution(
-            self.config.project,
-            self.config.environment,
-            self.config.job,
-        )
-
-        # Register handlers
-        self.handler = TrailwatchHandler(execution_id=self.execution_id, api=self.api)
-        self.handler.setLevel(logging.NOTSET)
-        for logger_name in self.config.loggers:
-            _logger = logging.getLogger(logger_name)
-            _logger.addHandler(self.handler)
-
+        for connector in self.config.shared_configuration.connectors:
+            connector.reset()
+            connector.configure(self.config)
+            connector.start_execution()
         return self
 
     def __exit__(
@@ -68,32 +62,24 @@ class TrailwatchContext:
         exc_traceback: Optional[TracebackType],
     ) -> bool:
         end = datetime.datetime.utcnow()
-        self.api.update_execution(
-            self.execution_id,
-            "failure" if exc_type is not None else "success",
-            end,
-        )
-
-        # Upload error and traceback to trailwatch server
-        if exc_type is not None:
-            self.api.create_error(
-                execution_id=self.execution_id,
-                timestamp=end,
-                name=exc_type.__name__,
-                message=str(exc_value),
-                traceback="".join(
-                    traceback.format_exception(
-                        etype=exc_type,
-                        value=exc_value,
-                        tb=exc_traceback,
-                    )
-                ),
-            )
-
-        # Remove trailwatch handler from loggers
-        for logger_name in self.config.loggers:
-            _logger = logging.getLogger(logger_name)
-            _logger.removeHandler(self.handler)
+        if exc_type is None:
+            status = "success"
+        else:
+            if isinstance(exc_type, ExecutionTimeoutError):
+                status = "timeout"
+            else:
+                status = "failure"
+        for connector in self.config.shared_configuration.connectors:
+            connector.finalize_execution(status, end)
+            if exc_type is not None:
+                assert exc_value is not None
+                assert exc_traceback is not None
+                connector.handle_exception(
+                    timestamp=end,
+                    exc_type=exc_type,
+                    exc_value=exc_value,
+                    exc_traceback=exc_traceback,
+                )
 
         if exc_type is None or issubclass(exc_type, TrailwatchError):
             return True
