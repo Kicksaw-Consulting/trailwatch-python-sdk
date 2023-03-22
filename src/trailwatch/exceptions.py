@@ -8,3 +8,7 @@ class NotConfiguredError(TrailwatchError):
 
 class ExecutionTimeoutError(TrailwatchError):
     """Exception raised when an execution times out"""
+
+
+class PartialSuccessError(TrailwatchError):
+    """Exception raised when an execution was partially successful"""

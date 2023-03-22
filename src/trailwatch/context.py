@@ -6,7 +6,7 @@ from types import TracebackType
 from typing import Optional, Type, Union
 
 from .config import NOTSET, TrailwatchConfig
-from .exceptions import ExecutionTimeoutError, TrailwatchError
+from .exceptions import ExecutionTimeoutError, PartialSuccessError, TrailwatchError
 
 
 class TrailwatchContext:
@@ -65,13 +65,15 @@ class TrailwatchContext:
         if exc_type is None:
             status = "success"
         else:
-            if isinstance(exc_type, ExecutionTimeoutError):
+            if issubclass(exc_type, ExecutionTimeoutError):
                 status = "timeout"
+            elif issubclass(exc_type, PartialSuccessError):
+                status = "partial"
             else:
                 status = "failure"
         for connector in self.config.shared_configuration.connectors:
             connector.finalize_execution(status, end)
-            if exc_type is not None:
+            if exc_type is not None and not issubclass(exc_type, TrailwatchError):
                 assert exc_value is not None
                 assert exc_traceback is not None
                 connector.handle_exception(
