@@ -1,6 +1,6 @@
 [tool.poetry]
-name = "trailwatch-python-sdk"
-version = "0.0.1"
+name = "trailwatch"
+version = "0.1.0"
 description = "Python SDK for Trailwatch by Kicksaw"
 license = "MIT"
 authors = ["George Bocharov <george@kicksaw.com>"]
