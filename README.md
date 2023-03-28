@@ -1,3 +1,12 @@
+<p align="center">
+  <a href="https://github.com/Kicksaw-Consulting/trailwatch-python-sdk/actions/workflows/test.yml?query=event%3Apush+branch%3Amain" target="_blank">
+      <img src="https://github.com/Kicksaw-Consulting/trailwatch-python-sdk/actions/workflows/test.yml/badge.svg?branch=main&event=push" alt="Test">
+  </a>
+  <a href="https://pypi.org/project/trailwatch" target="_blank">
+      <img src="https://badge.fury.io/py/trailwatch.svg" alt="PyPI Package">
+  </a>
+</p>
+
 - [Installation](#installation)
 - [Getting Started](#getting-started)
 - [Partial Success](#partial-success)
