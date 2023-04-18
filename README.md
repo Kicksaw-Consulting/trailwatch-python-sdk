@@ -13,18 +13,35 @@
 
 # Installation
 
+Install the SDK (supports AWS server):
+
 ```shell
 pip install trailwatch
+```
+
+Install with Salesforce connector support:
+
+```shell
+pip install trailwatch[salesforce]
 ```
 
 # Getting Started
 
 ```python
 from trailwatch import configure, watch
+from trailwatch.connectors import AwsConnector
 
 configure(
-  project="my-project",
-  trailwatch_url="https://<random>.execute-api.us-west-2.amazonaws.com",
+  project="My project name",
+  project_description="My project description",
+  environment="production",
+  connectors=[
+      AWSConnector(
+          url="https://<random>.execute-api.us-west-2.amazonaws.com",
+          api_key="my_key",
+      )
+  ],
+  loggers=["__main__", "integration"],
 )
 
 @watch()
@@ -41,11 +58,20 @@ and will not be propagated to the caller.
 
 ```python
 from trailwatch import configure, watch
+from trailwatch.connectors import AwsConnector
 from trailwatch.exceptions import PartialSuccessError
 
 configure(
-  project="my-project",
-  trailwatch_url="https://<random>.execute-api.us-west-2.amazonaws.com",
+  project="My project name",
+  project_description="My project description",
+  environment="production",
+  connectors=[
+      AWSConnector(
+          url="https://<random>.execute-api.us-west-2.amazonaws.com",
+          api_key="my_key",
+      )
+  ],
+  loggers=["__main__", "integration"],
 )
 
 @watch()

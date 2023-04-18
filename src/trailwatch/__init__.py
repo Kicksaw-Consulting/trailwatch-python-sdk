@@ -1,6 +1,5 @@
 __all__ = [
     "configure",
-    "AwsConnector",
     "TrailwatchContext",
     "watch",
 ]
@@ -10,7 +9,6 @@ import functools
 from typing import Optional, Union
 
 from .config import NOTSET, configure
-from .connectors import AwsConnector
 from .context import TrailwatchContext
 
 
