@@ -8,27 +8,14 @@ if TYPE_CHECKING:
     from trailwatch.config import TrailwatchConfig
 
 
-class ConnectorBase(ABC):
-    @abstractmethod
-    def reset(self) -> None:
-        ...
-
-    @property
-    @abstractmethod
-    def is_configured(self) -> bool:
-        ...
-
-    @abstractmethod
-    def configure(self, config: "TrailwatchConfig") -> None:
-        ...
-
+class Connector(ABC):
     @abstractmethod
     def start_execution(self) -> None:
-        ...
+        """Create execution record, attach handlers, etc."""
 
     @abstractmethod
     def finalize_execution(self, status: str, end: datetime.datetime) -> None:
-        ...
+        """Update execution record, detach handlers, etc."""
 
     @abstractmethod
     def handle_exception(
@@ -38,4 +25,10 @@ class ConnectorBase(ABC):
         exc_value: Exception,
         exc_traceback: TracebackType,
     ):
-        ...
+        """Add exception to execution record (or do nothing)."""
+
+
+class ConnectorFactory(ABC):
+    @abstractmethod
+    def __call__(self, config: "TrailwatchConfig") -> Connector:
+        """Create connector instance."""

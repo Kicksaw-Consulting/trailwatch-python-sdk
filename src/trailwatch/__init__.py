@@ -5,24 +5,36 @@ __all__ = [
 ]
 
 import functools
+import signal
 
-from typing import Optional, Union
-
-from .config import NOTSET, configure
+from .config import DEFAULT, Default, configure
 from .context import TrailwatchContext
+from .exceptions import ExecutionTimeoutError
 
 
-# TODO - add timeout configuration; add support for uploading files
+def throw_timeout_on_alarm(signum, frame):
+    raise ExecutionTimeoutError
+
+
+signal.signal(signal.SIGALRM, throw_timeout_on_alarm)
+
+
+# TODO - add support for uploading files (use locals() to get execution context)
 def watch(
-    job: Optional[str] = None,
-    job_description: Optional[str] = None,
-    loggers: Union[Optional[list[str]], object] = NOTSET,
-    execution_ttl: Union[Optional[int], object] = NOTSET,
-    log_ttl: Union[Optional[int], object] = NOTSET,
-    error_ttl: Union[Optional[int], object] = NOTSET,
+    job: str | None = None,
+    job_description: str | None = None,
+    loggers: list[str] | Default | None = DEFAULT,
+    execution_ttl: int | Default | None = DEFAULT,
+    log_ttl: int | Default | None = DEFAULT,
+    error_ttl: int | Default | None = DEFAULT,
+    timeout: int | None = None,
 ):
     """
-    Initialize a TrailwatchContext instance for a job.
+    Watch a callable (function or method).
+
+    This is a decorator that can be used to wrap a callable (function or method)
+    and send execution statistics (start, end, name, logs, exceptions, etc.)
+    to configured connectors.
 
     Parameters
     ----------
@@ -30,18 +42,22 @@ def watch(
         Job name. E.g., 'Upsert appointments'.
     job_description : str
         Job description. E.g., 'Upsert appointments from ModMed to Salesforce'.
-    loggers : Optional[list[str]], optional
-        List of loggers logs from which are sent to Trailwatch.
+    loggers : list[str], optional
+        List of loggers logs from which are sent to TrailWatch.
         By default, no logs are sent.
-    execution_ttl : Optional[int], optional
+    execution_ttl : int, optional
         Time to live for the execution record in seconds.
         By default, global configuration is used.
-    log_ttl : Optional[int], optional
+    log_ttl : int, optional
         Time to live for the log records in seconds.
         By default, global configuration is used.
-    error_ttl : Optional[int], optional
+    error_ttl : int, optional
         Time to live for the error records in seconds.
         By default, global configuration is used.
+    timeout : int, optional
+        Timeout in seconds. If the callable takes longer than this to execute,
+        an execution timeout error is raised and execution is marked as timed out.
+        By default, no timeout is set.
 
     """
 
@@ -62,6 +78,8 @@ def watch(
 
         @functools.wraps(func)
         def inner(*args, **kwargs):
+            if timeout is not None:
+                signal.alarm(timeout)
             with TrailwatchContext(**decorator_kwargs):
                 return func(*args, **kwargs)
 

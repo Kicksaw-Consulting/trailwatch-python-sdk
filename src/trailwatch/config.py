@@ -1,25 +1,34 @@
 from dataclasses import dataclass, field
-from typing import Optional, Union
 
-from trailwatch.connectors.base import ConnectorBase
+from trailwatch.connectors.base import ConnectorFactory
 
 from .exceptions import NotConfiguredError
 
-NOTSET = object()
+
+class Default:
+    """
+    Sentinel value to indicate that user did not set a value.
+
+    Used to distinguish between None and using globally configured value.
+
+    """
+
+
+DEFAULT = Default()
 
 
 @dataclass(frozen=True)
 class SharedConfiguration:
     is_configured: bool = False
-    connectors: list[ConnectorBase] = field(default_factory=list)
+    connectors: list[ConnectorFactory] = field(default_factory=list)
 
     project: str = ""
     project_description: str = ""
     environment: str = ""
     loggers: list[str] = field(default_factory=list)
-    execution_ttl: Optional[int] = None
-    log_ttl: Optional[int] = None
-    error_ttl: Optional[int] = None
+    execution_ttl: int | None = None
+    log_ttl: int | None = None
+    error_ttl: int | None = None
 
 
 class TrailwatchConfig:
@@ -30,19 +39,19 @@ class TrailwatchConfig:
     job_description: str
 
     # Shared properties which can be overridden for each job
-    _loggers: Union[Optional[list[str]], object]
-    _execution_ttl: Union[Optional[int], object]
-    _log_ttl: Union[Optional[int], object]
-    _error_ttl: Union[Optional[int], object]
+    _loggers: list[str] | Default | None
+    _execution_ttl: int | Default | None
+    _log_ttl: int | Default | None
+    _error_ttl: int | Default | None
 
     def __init__(
         self,
         job: str,
         job_description: str,
-        loggers: Union[Optional[list[str]], object] = NOTSET,
-        execution_ttl: Union[Optional[int], object] = NOTSET,
-        log_ttl: Union[Optional[int], object] = NOTSET,
-        error_ttl: Union[Optional[int], object] = NOTSET,
+        loggers: list[str] | Default | None = DEFAULT,
+        execution_ttl: int | Default | None = DEFAULT,
+        log_ttl: int | Default | None = DEFAULT,
+        error_ttl: int | Default | None = DEFAULT,
     ) -> None:
         """
         Initialize a TrailwatchConfig instance for a job.
@@ -53,23 +62,23 @@ class TrailwatchConfig:
             Job name. E.g., 'Upsert appointments'.
         job_description : str
             Job description. E.g., 'Upsert appointments from ModMed to Salesforce'.
-        loggers : Optional[list[str]], optional
-            List of loggers logs from which are sent to Trailwatch.
+        loggers : list[str], optional
+            List of loggers logs from which are sent to TrailWatch.
             By default, no logs are sent.
-        execution_ttl : Optional[int], optional
+        execution_ttl : int, optional
             Time to live for the execution record in seconds.
             By default, global configuration is used.
-        log_ttl : Optional[int], optional
+        log_ttl : int, optional
             Time to live for the log records in seconds.
             By default, global configuration is used.
-        error_ttl : Optional[int], optional
+        error_ttl : int, optional
             Time to live for the error records in seconds.
             By default, global configuration is used.
 
         """
         if not self.shared_configuration.is_configured:
             raise NotConfiguredError(
-                "Trailwatch must be configured with trailwatch.configure() before using"
+                "TrailWatch must be configured with trailwatch.configure() before using"
             )
         self.job = job
         self.job_description = job_description
@@ -92,28 +101,28 @@ class TrailwatchConfig:
 
     @property
     def loggers(self) -> list[str]:
-        if self._loggers is not NOTSET:
+        if self._loggers is not DEFAULT:
             assert isinstance(self._loggers, (list, type(None)))
             return self._loggers or []
         return self.shared_configuration.loggers
 
     @property
-    def execution_ttl(self) -> Optional[int]:
-        if self._execution_ttl is not NOTSET:
+    def execution_ttl(self) -> int | None:
+        if self._execution_ttl is not DEFAULT:
             assert isinstance(self._execution_ttl, (int, type(None)))
             return self._execution_ttl
         return self.shared_configuration.execution_ttl
 
     @property
-    def log_ttl(self) -> Optional[int]:
-        if self._log_ttl is not NOTSET:
+    def log_ttl(self) -> int | None:
+        if self._log_ttl is not DEFAULT:
             assert isinstance(self._log_ttl, (int, type(None)))
             return self._log_ttl
         return self.shared_configuration.log_ttl
 
     @property
-    def error_ttl(self) -> Optional[int]:
-        if self._error_ttl is not NOTSET:
+    def error_ttl(self) -> int | None:
+        if self._error_ttl is not DEFAULT:
             assert isinstance(self._error_ttl, (int, type(None)))
             return self._error_ttl
         return self.shared_configuration.error_ttl
@@ -123,14 +132,14 @@ def configure(
     project: str,
     project_description: str,
     environment: str,
-    connectors: list[ConnectorBase],
-    loggers: Optional[list[str]] = None,
-    execution_ttl: Optional[int] = None,
-    log_ttl: Optional[int] = None,
-    error_ttl: Optional[int] = None,
+    connectors: list[ConnectorFactory],
+    loggers: list[str] | None = None,
+    execution_ttl: int | None = None,
+    log_ttl: int | None = None,
+    error_ttl: int | None = None,
 ):
     """
-    Configure Trailwatch.
+    Configure TrailWatch.
 
     This function configures global settings shared across all executions unless
     explicitly overridden for a specific job.
@@ -147,16 +156,18 @@ def configure(
     environment : str
         Environment in which all jobs are executed.
         E.g., 'production', 'staging', 'development'.
-    loggers : Optional[list[str]], optional
-        List of loggers logs from which are sent to Trailwatch.
+    connectors : list[ConnectorFactoryBase]
+        List of connectors to use.
+    loggers : list[str], optional
+        List of loggers logs from which are sent to TrailWatch.
         By default, no logs are sent.
-    execution_ttl : Optional[int], optional
+    execution_ttl : int, optional
         Time to live for the execution record in seconds.
         By default, the execution record is kept indefinitely.
-    log_ttl : Optional[int], optional
+    log_ttl : int, optional
         Time to live for the log records in seconds.
         By default, the log records are kept indefinitely.
-    error_ttl : Optional[int], optional
+    error_ttl : int, optional
         Time to live for the error records in seconds.
         By default, the error records are kept indefinitely.
 

@@ -1,11 +1,10 @@
-from __future__ import annotations
-
 import datetime
 
 from types import TracebackType
-from typing import Optional, Type, Union
+from typing import Type
 
-from .config import NOTSET, TrailwatchConfig
+from .config import DEFAULT, Default, TrailwatchConfig
+from .connectors.base import Connector
 from .exceptions import ExecutionTimeoutError, PartialSuccessError, TrailwatchError
 
 
@@ -14,10 +13,10 @@ class TrailwatchContext:
         self,
         job: str,
         job_description: str,
-        loggers: Union[Optional[list[str]], object] = NOTSET,
-        execution_ttl: Union[Optional[int], object] = NOTSET,
-        log_ttl: Union[Optional[int], object] = NOTSET,
-        error_ttl: Union[Optional[int], object] = NOTSET,
+        loggers: list[str] | Default | None = DEFAULT,
+        execution_ttl: int | Default | None = DEFAULT,
+        log_ttl: int | Default | None = DEFAULT,
+        error_ttl: int | Default | None = DEFAULT,
     ) -> None:
         """
         Initialize a TrailwatchContext instance for a job.
@@ -28,14 +27,14 @@ class TrailwatchContext:
             Job name. E.g., 'Upsert appointments'.
         job_description : str
             Job description. E.g., 'Upsert appointments from ModMed to Salesforce'.
-        loggers : Optional[list[str]], optional
-            List of loggers logs from which are sent to Trailwatch.
+        loggers : list[str], optional
+            List of loggers logs from which are sent to TrailWatch.
             By default, no logs are sent.
-        execution_ttl : Optional[int], optional
+        execution_ttl : int, optional
             Time to live for the execution record in seconds.
-        log_ttl : Optional[int], optional
+        log_ttl : int, optional
             Time to live for the log records in seconds.
-        error_ttl : Optional[int], optional
+        error_ttl : int, optional
             Time to live for the error records in seconds.
 
         """
@@ -47,19 +46,20 @@ class TrailwatchContext:
             log_ttl=log_ttl,
             error_ttl=error_ttl,
         )
+        self.connectors: list[Connector] = []
 
-    def __enter__(self) -> TrailwatchContext:
-        for connector in self.config.shared_configuration.connectors:
-            connector.reset()
-            connector.configure(self.config)
+    def __enter__(self) -> "TrailwatchContext":
+        for connector_factory in self.config.shared_configuration.connectors:
+            connector = connector_factory(self.config)
             connector.start_execution()
+            self.connectors.append(connector)
         return self
 
     def __exit__(
         self,
-        exc_type: Optional[Type[Exception]],
-        exc_value: Optional[Exception],
-        exc_traceback: Optional[TracebackType],
+        exc_type: Type[Exception] | None,
+        exc_value: Exception | None,
+        exc_traceback: TracebackType | None,
     ) -> bool:
         end = datetime.datetime.utcnow()
         if exc_type is None:
@@ -71,7 +71,7 @@ class TrailwatchContext:
                 status = "partial"
             else:
                 status = "failure"
-        for connector in self.config.shared_configuration.connectors:
+        for connector in self.connectors:
             connector.finalize_execution(status, end)
             if exc_type is not None and not issubclass(exc_type, TrailwatchError):
                 assert exc_value is not None
@@ -82,7 +82,6 @@ class TrailwatchContext:
                     exc_value=exc_value,
                     exc_traceback=exc_traceback,
                 )
-
-        if exc_type is None or issubclass(exc_type, TrailwatchError):
+        if isinstance(exc_type, PartialSuccessError):
             return True
         return False

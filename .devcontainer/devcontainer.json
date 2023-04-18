@@ -1,5 +1,5 @@
 {
-  "name": "Trailwatch Python SDK, Python 3.10",
+  "name": "TrailWatch Python SDK, Python 3.10",
   "build": {
     "dockerfile": "Dockerfile",
     "context": ".."

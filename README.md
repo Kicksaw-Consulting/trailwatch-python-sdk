@@ -8,8 +8,9 @@
 </p>
 
 - [Installation](#installation)
-- [Getting Started](#getting-started)
-- [Partial Success](#partial-success)
+- [Using TrailWatch](#using-trailwatch)
+  - [Partial Success](#partial-success)
+  - [Timeout](#timeout)
 
 # Installation
 
@@ -25,18 +26,18 @@ Install with Salesforce connector support:
 pip install trailwatch[salesforce]
 ```
 
-# Getting Started
+# Using TrailWatch
 
 ```python
 from trailwatch import configure, watch
-from trailwatch.connectors import AwsConnector
+from trailwatch.connectors.aws import AwsConnectorFactory
 
 configure(
   project="My project name",
   project_description="My project description",
   environment="production",
   connectors=[
-      AWSConnector(
+      AWSConnectorFactory(
           url="https://<random>.execute-api.us-west-2.amazonaws.com",
           api_key="my_key",
       )
@@ -50,15 +51,15 @@ def handler(event, context):
   return
 ```
 
-# Partial Success
+## Partial Success
 
 Raise a `PartialSuccess` exception to indicate that the execution was partially
-successful. This exception is handled by Trailwatch to set execution status to `partial`
+successful. This exception is handled by TrailWatch to set execution status to `partial`
 and will not be propagated to the caller.
 
 ```python
 from trailwatch import configure, watch
-from trailwatch.connectors import AwsConnector
+from trailwatch.connectors.aws import AwsConnectorFactory
 from trailwatch.exceptions import PartialSuccessError
 
 configure(
@@ -66,7 +67,7 @@ configure(
   project_description="My project description",
   environment="production",
   connectors=[
-      AWSConnector(
+      AWSConnectorFactory(
           url="https://<random>.execute-api.us-west-2.amazonaws.com",
           api_key="my_key",
       )
@@ -80,4 +81,33 @@ def handler(event, context):
   # You find out that only a subset of the work was successful
   # Log information about the failure normally using the logger
   raise PartialSuccessError
+```
+
+## Timeout
+
+You can set timeout on a function to force it to stop after a certain amount of time.
+This will raise `TimeoutError` and set the execution status to `timeout`.
+
+```python
+from trailwatch import configure, watch
+from trailwatch.connectors.aws import AwsConnectorFactory
+from trailwatch.exceptions import PartialSuccessError
+
+configure(
+  project="My project name",
+  project_description="My project description",
+  environment="production",
+  connectors=[
+      AWSConnectorFactory(
+          url="https://<random>.execute-api.us-west-2.amazonaws.com",
+          api_key="my_key",
+      )
+  ],
+  loggers=["__main__", "integration"],
+)
+
+@watch(timeout=10)
+def handler(event, context):
+  # Do something that takes more than 10 seconds
+  ...
 ```

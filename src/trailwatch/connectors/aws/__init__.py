@@ -1,5 +1,5 @@
 __all__ = [
-    "AwsConnector",
+    "AwsConnectorFactory",
 ]
 
-from .connector import AwsConnector
+from .connector import AwsConnectorFactory

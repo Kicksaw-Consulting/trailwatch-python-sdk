@@ -6,7 +6,7 @@ from typing import Optional
 from .api import TrailwatchApi
 
 
-class TrailwatchHandler(logging.Handler):
+class AwsHandler(logging.Handler):
     def __init__(
         self,
         execution_id: str,
