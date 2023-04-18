@@ -2,7 +2,7 @@
 name = "trailwatch"
 version = "0.2.0"
 description = "Python SDK for TrailWatch by Kicksaw"
-license = "MIT"
+license = "Apache-2.0"
 authors = ["George Bocharov <george@kicksaw.com>"]
 readme = "README.md"
 homepage = "https://www.kicksaw.com/"
