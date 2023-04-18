@@ -21,7 +21,7 @@ jobs:
       - name: Install python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.9"
+          python-version: "3.10"
       - name: Cache poetry installation
         id: cache-poetry
         uses: actions/cache@v3

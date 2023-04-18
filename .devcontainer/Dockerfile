@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/vscode/devcontainers/python:3.9-buster
+FROM mcr.microsoft.com/vscode/devcontainers/python:3.10-buster
 
 SHELL ["/bin/bash", "-c"]
 
