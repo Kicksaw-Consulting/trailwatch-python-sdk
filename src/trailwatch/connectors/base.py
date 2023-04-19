@@ -2,7 +2,7 @@ import datetime
 
 from abc import ABC, abstractmethod
 from types import TracebackType
-from typing import TYPE_CHECKING, Type
+from typing import TYPE_CHECKING, BinaryIO, Type
 
 if TYPE_CHECKING:
     from trailwatch.config import TrailwatchConfig
@@ -26,6 +26,10 @@ class Connector(ABC):
         exc_traceback: TracebackType,
     ):
         """Add exception to execution record (or do nothing)."""
+
+    @abstractmethod
+    def send_fileobj(self, name: str, file: BinaryIO) -> None:
+        """Send a file to TrailWatch (or do nothing)."""
 
 
 class ConnectorFactory(ABC):

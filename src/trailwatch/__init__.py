@@ -5,21 +5,20 @@ __all__ = [
 ]
 
 import functools
-import signal
+import inspect
+
+from typing import Callable, TypeVar
+
+from typing_extensions import Concatenate, ParamSpec
 
 from .config import DEFAULT, Default, configure
 from .context import TrailwatchContext
-from .exceptions import ExecutionTimeoutError
+
+_P = ParamSpec("_P")
+_T = TypeVar("_T")
 
 
-def throw_timeout_on_alarm(signum, frame):
-    raise ExecutionTimeoutError
-
-
-signal.signal(signal.SIGALRM, throw_timeout_on_alarm)
-
-
-# TODO - add support for uploading files (use locals() to get execution context)
+# TODO - add support for uploading files (inspect for argument)
 def watch(
     job: str | None = None,
     job_description: str | None = None,
@@ -61,7 +60,12 @@ def watch(
 
     """
 
-    def wrapper(func):
+    def wrapper(
+        func: Callable[Concatenate[TrailwatchContext, _P], _T]
+    ) -> Callable[_P, _T]:
+        if inspect.iscoroutinefunction(func):
+            raise NotImplementedError("Coroutine functions are not supported")
+
         decorator_kwargs = {
             "job": job or func.__name__,
             "job_description": job_description or func.__doc__,
@@ -69,6 +73,7 @@ def watch(
             "execution_ttl": execution_ttl,
             "log_ttl": log_ttl,
             "error_ttl": error_ttl,
+            "timeout": timeout,
         }
         if decorator_kwargs["job_description"] is None:
             raise ValueError(
@@ -78,9 +83,12 @@ def watch(
 
         @functools.wraps(func)
         def inner(*args, **kwargs):
-            if timeout is not None:
-                signal.alarm(timeout)
-            with TrailwatchContext(**decorator_kwargs):
+            with TrailwatchContext(**decorator_kwargs) as tw_context:
+                if "trailwatch_execution_context" in [
+                    *inspect.getfullargspec(func).args,
+                    *inspect.getfullargspec(func).kwonlyargs,
+                ]:
+                    kwargs["trailwatch_execution_context"] = tw_context
                 return func(*args, **kwargs)
 
         return inner

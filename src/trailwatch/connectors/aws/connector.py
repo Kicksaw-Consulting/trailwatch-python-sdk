@@ -3,7 +3,7 @@ import logging
 import traceback
 
 from types import TracebackType
-from typing import TYPE_CHECKING, Type
+from typing import TYPE_CHECKING, BinaryIO, Type
 
 from requests import Session
 
@@ -84,6 +84,14 @@ class AwsConnector(Connector):
                     )
                 ),
                 ttl=self.config.error_ttl,
+            )
+
+    def send_fileobj(self, name: str, file: BinaryIO) -> None:
+        if self.execution_id is not None:
+            self.api.upload_file(
+                execution_id=self.execution_id,
+                name=name,
+                file=file,
             )
 
 
