@@ -19,7 +19,6 @@ _P = ParamSpec("_P")
 _T = TypeVar("_T")
 
 
-# TODO - add support for uploading files (inspect for argument)
 def watch(
     job: str | None = None,
     job_description: str | None = None,
@@ -74,6 +73,8 @@ def watch(
             _job_description = re.sub(r"\n\s+", " ", _job_description)
             # Remove multiple spaces
             _job_description = re.sub(r"\s+", " ", _job_description)
+            # Remove leading and trailing spaces
+            _job_description = _job_description.strip()
 
         decorator_kwargs = {
             "job": job or func.__name__,
