@@ -6,6 +6,7 @@ __all__ = [
 
 import functools
 import inspect
+import re
 
 from typing import Callable, TypeVar
 
@@ -66,9 +67,17 @@ def watch(
         if inspect.iscoroutinefunction(func):
             raise NotImplementedError("Coroutine functions are not supported")
 
+        # Generate job description from docstring if not provided explicitly
+        _job_description = job_description or func.__doc__
+        if _job_description is not None:
+            # Remove indentation from docstring
+            _job_description = re.sub(r"\n\s+", " ", _job_description)
+            # Remove multiple spaces
+            _job_description = re.sub(r"\s+", " ", _job_description)
+
         decorator_kwargs = {
             "job": job or func.__name__,
-            "job_description": job_description or func.__doc__,
+            "job_description": _job_description,
             "loggers": loggers,
             "execution_ttl": execution_ttl,
             "log_ttl": log_ttl,
