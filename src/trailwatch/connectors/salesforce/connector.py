@@ -54,8 +54,10 @@ class SalesforceConnector(Connector):
             response = self.salesforce.query_all(
                 format_soql(
                     (
-                        f"SELECT Id FROM {NAMESPACE}{INTEGRATION} "  # nosec
+                        f"SELECT Id "
+                        f"FROM {NAMESPACE}{INTEGRATION} "  # nosec
                         f"WHERE Name = {{name}}"
+                        f"ORDER BY LastModifiedDate ASC"
                     ),
                     name=self.config.job,
                 )
@@ -72,8 +74,13 @@ class SalesforceConnector(Connector):
                 )
                 self.integration_object_id = response["id"]
             else:
-                assert len(response["records"]) == 1
                 self.integration_object_id = response["records"][0]["Id"]
+                if len(response["records"]) > 1:
+                    warnings.warn(
+                        f"Found multiple Salesforce integration objects "
+                        f"for '{self.config.job}', using the oldest one: "
+                        f"'{self.integration_object_id}'"
+                    )
 
             # Create execution
             response = getattr(
