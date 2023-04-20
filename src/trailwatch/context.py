@@ -7,8 +7,14 @@ from types import TracebackType
 from typing import BinaryIO, Type
 
 from .config import DEFAULT, Default, TrailwatchConfig
+from .connectors.aws.connector import AwsConnector
 from .connectors.base import Connector
 from .exceptions import ExecutionTimeoutError, PartialSuccessError, TrailwatchError
+
+try:
+    from .connectors.salesforce.connector import SalesforceConnector
+except ImportError:
+    SalesforceConnector = None
 
 
 def throw_timeout_on_alarm(signum, frame):
@@ -156,6 +162,18 @@ class TrailwatchContext:
         exc_value: Exception | None,
         exc_traceback: TracebackType | None,
     ) -> bool:
+        # Add URL of execution on AWS to Salesforce connectors
+        if SalesforceConnector is not None:
+            url = None
+            for connector in self.connectors:
+                if isinstance(connector, AwsConnector):
+                    url = connector.execution_url
+                    break
+            if url is not None:
+                for connector in self.connectors:
+                    if isinstance(connector, SalesforceConnector):
+                        connector.trailwatch_aws_execution_url = url
+
         end = datetime.datetime.utcnow()
         if exc_type is None:
             status = "success"

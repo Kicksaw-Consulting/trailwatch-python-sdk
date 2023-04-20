@@ -25,6 +25,12 @@ class AwsConnector(Connector):
         self.execution_id: str | None = None
         self.handler: AwsHandler | None = None
 
+    @property
+    def execution_url(self) -> str | None:
+        if self.execution_id is None:
+            return None
+        return "/".join([self.api.url, self.execution_id])
+
     def start_execution(self) -> None:
         # Create entries in TrailWatch database
         self.api.upsert_project(

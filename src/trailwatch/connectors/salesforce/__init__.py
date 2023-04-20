@@ -1,9 +1,9 @@
 __all__ = [
-    "SalesforceConnector",
+    "SalesforceConnectorFactory",
 ]
 
 try:
-    from .connector import SalesforceConnector
+    from .connector import SalesforceConnectorFactory
 except ImportError as error:
     raise ImportError(
         "You must install the 'salesforce' extra to use the Salesforce connector: "

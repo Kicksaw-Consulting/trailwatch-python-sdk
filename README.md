@@ -11,10 +11,14 @@
 - [Using TrailWatch](#using-trailwatch)
   - [Decorator](#decorator)
   - [Context Manager](#context-manager)
+- [Connectors](#connectors)
+  - [AWS Connector](#aws-connector)
+  - [Salesforce Connector](#salesforce-connector)
+- [Control Execution Status](#control-execution-status)
   - [Partial Success](#partial-success)
   - [Timeout](#timeout)
-  - [Send a File](#send-a-file)
-  - [Using With Other Decorators](#using-with-other-decorators)
+- [Send a File](#send-a-file)
+- [Using With Other Decorators](#using-with-other-decorators)
 
 # Installation
 
@@ -63,6 +67,10 @@ def handler(event, context):
 
 ## Context Manager
 
+Decorator uses this context manager internally. You can use the context manager
+directly if you need more control over the execution or if you want to report a portion
+of the execution (code block) as a separate job.
+
 ```python
 from trailwatch import configure, TrailwatchContext
 from trailwatch.connectors.aws import AwsConnectorFactory
@@ -82,13 +90,67 @@ configure(
 
 
 def handler(event, context):
+    # Other code
     with TrailwatchContext(
         job="My Job",
         job_description="My job description",
     ) as execution:
         # Do your thing
         return
+    # Other code
 ```
+
+# Connectors
+
+TwailWatch SDK works by attaching connectors to the execution context. Connectors
+are responsible for tracking execution flow and for creating a record in their
+respective systems. Connectors should be configured using the `configure` function
+by provividing a list of connector factories in the `connectors` argument.
+
+## AWS Connector
+
+AWS connector is used to send execution information to AWS TrailWatch service deployed
+in client's AWS account. To use AWS connector, you will need to deploy the TrailWatch
+service first and then obtain URL and API key from the service.
+
+```python
+from trailwatch.connectors.aws import AwsConnectorFactory
+
+configure(
+    # Other configuration parameters
+    connectors=[
+        AWSConnectorFactory(
+            url="url",
+            api_key="key",
+        )
+    ],
+)
+```
+
+## Salesforce Connector
+
+Salesforce connector is used to send execution information to Kicksaw Integration App
+deployed to client's Salesforce org. To use Salesforce connector, you will need to
+deploy the Kicksaw Integration App first and then obtain credentials required to sign
+in to the Salesforce org.
+
+```python
+from trailwatch.connectors.salesforce import SalesforceConnectorFactory
+
+configure(
+    # Other configuration parameters
+    connectors=[
+        SalesforceConnectorFactory(
+            username="username",
+            password="password",
+            security_token="token",
+            domain="domain",
+        )
+    ],
+)
+```
+
+# Control Execution Status
 
 ## Partial Success
 
@@ -138,7 +200,7 @@ def handler(event, context):
         ...
 ```
 
-## Send a File
+# Send a File
 
 Some connectors support attaching (sending) files to be associated with the execution.
 To send a file, use the `send_file` method on the `TrailwatchContext` object.
@@ -171,7 +233,11 @@ def handler(event, context, trailwatch_execution_context: TrailwatchContext):
     trailwatch_execution_context.send_file("my_file.txt", "/path/to/my_file.txt")
 ```
 
-## Using With Other Decorators
+Connectors supporting sending files:
+
+- AWS Connector
+
+# Using With Other Decorators
 
 When using TrailWatch with other decorators, make sure that TrailWatch decorator
 is the innermost decorator. This is because TrailWatch decorator may inject

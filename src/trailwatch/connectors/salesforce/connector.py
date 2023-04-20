@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 NAMESPACE = "KicksawEng__"  # prefix for all custom Salesforce objects
 INTEGRATION = "Integration__c"  # job
-EXECUTION = "Execution__c"  # execution
+EXECUTION = "IntegrationExecution__c"  # execution
 
 
 class SalesforceConnector(Connector):
@@ -43,6 +43,7 @@ class SalesforceConnector(Connector):
             self.salesforce = None
         self.integration_object_id: str | None = None
         self.execution_object_id: str | None = None
+        self.trailwatch_aws_execution_url: str | None = None
 
     def start_execution(self) -> None:
         if self.salesforce is None:
@@ -50,11 +51,12 @@ class SalesforceConnector(Connector):
 
         try:
             # Create integration
-            response = self.salesforce.query(
+            response = self.salesforce.query_all(
                 format_soql(
-                    "SELECT Id FROM {namespace}{integration} WHERE Name = '{name}'",
-                    namespace=NAMESPACE,
-                    integration=INTEGRATION,
+                    (
+                        f"SELECT Id FROM {NAMESPACE}{INTEGRATION} "  # nosec
+                        f"WHERE Name = {{name}}"
+                    ),
                     name=self.config.job,
                 )
             )
@@ -71,7 +73,7 @@ class SalesforceConnector(Connector):
                 self.integration_object_id = response["id"]
             else:
                 assert len(response["records"]) == 1
-                self.integration_object_id = response["records"][0]["id"]
+                self.integration_object_id = response["records"][0]["Id"]
 
             # Create execution
             response = getattr(
@@ -94,6 +96,10 @@ class SalesforceConnector(Connector):
             return
 
         try:
+            response_payload = None
+            if self.trailwatch_aws_execution_url is not None:
+                response_payload = f"See details at {self.trailwatch_aws_execution_url}"
+
             # Set execution status (toggles checkbox to indicate success)
             if status == "success":
                 getattr(
@@ -102,8 +108,20 @@ class SalesforceConnector(Connector):
                 ).update(
                     self.execution_object_id,
                     {
-                        f"{NAMESPACE}ResponsePayload__c": None,
+                        f"{NAMESPACE}ResponsePayload__c": response_payload,
                         f"{NAMESPACE}SuccessfulCompletion__c": True,
+                    },
+                )
+            else:
+                getattr(
+                    self.salesforce,
+                    f"{NAMESPACE}{EXECUTION}",
+                ).update(
+                    self.execution_object_id,
+                    {
+                        f"{NAMESPACE}ResponsePayload__c": response_payload,
+                        f"{NAMESPACE}SuccessfulCompletion__c": False,
+                        f"{NAMESPACE}ErrorMessage__c": f"Soft error: {status}",
                     },
                 )
         except Exception as error:
@@ -124,7 +142,7 @@ class SalesforceConnector(Connector):
 
         try:
             # Add exception to execution
-            message = f"{exc_type}: {exc_value}"
+            message = f"{exc_type.__name__}: {exc_value}"
             getattr(
                 self.salesforce,
                 f"{NAMESPACE}{EXECUTION}",
