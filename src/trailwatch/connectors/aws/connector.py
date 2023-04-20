@@ -29,7 +29,7 @@ class AwsConnector(Connector):
     def execution_url(self) -> str | None:
         if self.execution_id is None:
             return None
-        return "/".join([self.api.url, self.execution_id])
+        return "/".join([self.api.url, "executions", self.execution_id])
 
     def start_execution(self) -> None:
         # Create entries in TrailWatch database
