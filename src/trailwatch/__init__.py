@@ -6,17 +6,9 @@ __all__ = [
 
 import functools
 import inspect
-import re
-
-from typing import Callable, TypeVar
-
-from typing_extensions import Concatenate, ParamSpec
 
 from .config import DEFAULT, Default, configure
 from .context import TrailwatchContext
-
-_P = ParamSpec("_P")
-_T = TypeVar("_T")
 
 
 def watch(
@@ -34,6 +26,10 @@ def watch(
     This is a decorator that can be used to wrap a callable (function or method)
     and send execution statistics (start, end, name, logs, exceptions, etc.)
     to configured connectors.
+
+    If decorated function takes a keyword argument named `trailwatch_execution_context`,
+    the context object is passed to the function. You can ignore static analysis
+    warnings about this argument not being used.
 
     Parameters
     ----------
@@ -60,25 +56,14 @@ def watch(
 
     """
 
-    def wrapper(
-        func: Callable[Concatenate[TrailwatchContext, _P], _T]
-    ) -> Callable[_P, _T]:
+    def wrapper(func):
         if inspect.iscoroutinefunction(func):
             raise NotImplementedError("Coroutine functions are not supported")
 
-        # Generate job description from docstring if not provided explicitly
-        _job_description = job_description or func.__doc__
-        if _job_description is not None:
-            # Remove indentation from docstring
-            _job_description = re.sub(r"\n\s+", " ", _job_description)
-            # Remove multiple spaces
-            _job_description = re.sub(r"\s+", " ", _job_description)
-            # Remove leading and trailing spaces
-            _job_description = _job_description.strip()
-
         decorator_kwargs = {
             "job": job or func.__name__,
-            "job_description": _job_description,
+            "job_description": job_description
+            or (inspect.cleandoc(func.__doc__) if func.__doc__ else None),
             "loggers": loggers,
             "execution_ttl": execution_ttl,
             "log_ttl": log_ttl,
@@ -98,7 +83,11 @@ def watch(
                     *inspect.getfullargspec(func).args,
                     *inspect.getfullargspec(func).kwonlyargs,
                 ]:
-                    kwargs["trailwatch_execution_context"] = tw_context
+                    return func(
+                        *args,
+                        **kwargs,
+                        trailwatch_execution_context=tw_context,
+                    )
                 return func(*args, **kwargs)
 
         return inner
