@@ -3,7 +3,7 @@ import io
 import signal
 
 from pathlib import Path
-from types import TracebackType
+from types import FrameType, TracebackType
 from typing import BinaryIO, Type
 
 from .config import DEFAULT, Default, TrailwatchConfig
@@ -17,11 +17,67 @@ except ImportError:
     SalesforceConnector = None
 
 
-def throw_timeout_on_alarm(signum, frame):
-    raise ExecutionTimeoutError
+class TimeoutManager:
+    """
+    This is used to manage the timeout of a job execution.
 
+    Timeout is implemented using the SIGALRM signal.
+    This works only on Unix systems and is not thread-safe.
 
-signal.signal(signal.SIGALRM, throw_timeout_on_alarm)
+    """
+
+    def __init__(self, timeout: int | None):
+        """
+        Initialize a TimeoutManager instance.
+
+        Parameters
+        ----------
+        timeout : int | None
+            Timeout in seconds.
+            If None, no timeout is set (no-op).
+
+        """
+        self.timeout = timeout
+        self.original_alarm_handler = None
+
+    @staticmethod
+    def handle_timeout(signum: int, frame: FrameType | None) -> None:
+        raise ExecutionTimeoutError
+
+    def register_timeout_handler(self) -> None:
+        """
+        Store the original alarm handler and register the timeout handler.
+
+        """
+        if self.timeout is not None:
+            self.original_alarm_handler = signal.getsignal(signal.SIGALRM)
+            signal.signal(signal.SIGALRM, self.handle_timeout)
+            signal.alarm(self.timeout)
+
+    def restore_original_handler(self) -> None:
+        """
+        Restore the original alarm handler and cancel the alarm.
+
+        If not canceled, the alarm may be triggered when running another process
+        (e.g. next Azure or AWS Lambda function) in the same environment.
+
+        """
+        if self.timeout is not None:
+            signal.alarm(0)
+            assert self.original_alarm_handler is not None
+            signal.signal(signal.SIGALRM, self.original_alarm_handler)
+
+    def __enter__(self) -> "TimeoutManager":
+        self.register_timeout_handler()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Type[Exception] | None,
+        exc_value: Exception | None,
+        exc_traceback: TracebackType | None,
+    ) -> None:
+        self.restore_original_handler()
 
 
 class TrailwatchContext:
@@ -82,7 +138,7 @@ class TrailwatchContext:
             error_ttl=error_ttl,
         )
         self.connectors: list[Connector] = []
-        self.timeout = timeout
+        self.timeout = TimeoutManager(timeout)
 
     def send_file(self, file: Path | str) -> None:
         """
@@ -148,8 +204,7 @@ class TrailwatchContext:
         self.send_fileobj(name, io.BytesIO(content))
 
     def __enter__(self) -> "TrailwatchContext":
-        if self.timeout is not None:
-            signal.alarm(self.timeout)
+        self.timeout.register_timeout_handler()
         for connector_factory in self.config.shared_configuration.connectors:
             connector = connector_factory(self.config)
             connector.start_execution()
@@ -162,6 +217,7 @@ class TrailwatchContext:
         exc_value: Exception | None,
         exc_traceback: TracebackType | None,
     ) -> bool:
+        self.timeout.restore_original_handler()
         # Add URL of execution on AWS to Salesforce connectors
         if SalesforceConnector is not None:
             url = None
