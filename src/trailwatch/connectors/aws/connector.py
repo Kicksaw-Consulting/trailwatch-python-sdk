@@ -115,7 +115,7 @@ class AwsConnectorFactory(ConnectorFactory):
             API key to be included in the 'x-api-key' header when calling the REST API.
 
         """
-        self.url = url
+        self.url = url.strip(" /")
         self.api_key = api_key
 
     def __call__(self, config: "TrailwatchConfig") -> AwsConnector:
